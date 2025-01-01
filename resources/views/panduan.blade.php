@@ -26,7 +26,6 @@
                 <p>Pastikan Anda keluar dari aplikasi setelah selesai menggunakan.</p>
             </li>
             <hr>
-
             <h6><strong>FAQ</strong></h6>
             <p><strong>Tanya:</strong> Bagaimana cara mengunggah file?</p>
             <p><strong>Jawab:</strong> Gunakan menu <em>Daftar File</em> dan klik tombol "Unggah File".</p>
