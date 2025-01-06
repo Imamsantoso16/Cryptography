@@ -20,6 +20,13 @@
                     {{ session('error') }}
                 </div>
             @endif
+
+            @if(session('encryption_time'))
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    Durasi enkripsi: {{ session('encryption_time') }} detik
+                </div>
+            @endif
+
             <form action="{{ route('enkripsi.store') }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="form-group">

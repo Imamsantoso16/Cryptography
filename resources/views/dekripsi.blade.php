@@ -21,6 +21,12 @@
                 </div>
             @endif
 
+            @if(session('decryption_time'))
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    Durasi dekripsi: {{ session('decryption_time') }} detik
+                </div>
+            @endif
+
             <form action="{{ route('dekripsi.store') }}" method="POST">
                 @csrf
                 <div class="form-group">

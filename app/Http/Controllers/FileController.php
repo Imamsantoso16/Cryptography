@@ -16,41 +16,50 @@ class FileController extends Controller
     
     public function store(Request $request)
     {
-        try{
+        try {
+            $startTime = microtime(true); // <-- Start time
+    
             $request->validate([
-                'date' => 'required|date',
-                'file' => 'required|file|mimes:jpg,jpeg,png,pdf,docx,txt|max:10240',
-                'password' => 'required|string|min:8',
-                'description' => 'required|string',
+                'date'       => 'required|date',
+                'file'       => 'required|file|mimes:jpg,jpeg,png,pdf,docx,txt|max:10240',
+                'password'   => 'required|string|min:8',
+                'description'=> 'required|string',
             ]);
     
-            $file = $request->file('file');
+            $file     = $request->file('file');
             $fileName = time() . '_' . $file->getClientOriginalName();
             $filePath = $file->storeAs('files', $fileName);
     
             $password = $request->password;
-    
             $encryptedFile = $this->tripleAesEncrypt(Storage::get($filePath), $password);
     
             $encryptedFileName = 'enc_' . rand(1000, 9999) . '_' . $fileName;
             Storage::put('encrypted/' . $encryptedFileName, $encryptedFile);
     
             $fileModel = new File();
-            $fileModel->username = auth()->user()->username;
-            $fileModel->file_name = $fileName;
+            $fileModel->username       = auth()->user()->username;
+            $fileModel->file_name      = $fileName;
             $fileModel->encrypted_file = $encryptedFileName;
             $fileModel->decrypted_file = "";
-            $fileModel->password = $password;
-            $fileModel->keterangan = $request->description;
+            $fileModel->password       = $password;
+            $fileModel->keterangan     = $request->description;
+    
             $fileSizeInBytes = $file->getSize();
-            $fileSizeInKB = $fileSizeInBytes / 1024;
-            $fileModel->file_size = $fileSizeInKB;
-            $fileModel->status = 'Terenkripsi';
-            $fileModel->tanggal = $request->date;
-            $fileModel->tanggal_enkripsi = now();
+            $fileSizeInKB    = $fileSizeInBytes / 1024;
+            $fileModel->file_size       = $fileSizeInKB;
+            $fileModel->status          = 'Terenkripsi';
+            $fileModel->tanggal         = $request->date;
+            $fileModel->tanggal_enkripsi= now();
             $fileModel->save();
     
-            return back()->with('success', 'File berhasil dienkripsi!');
+            $endTime = microtime(true);
+            $duration = $endTime - $startTime;
+    
+            $duration = round($duration, 3);
+    
+            return back()->with('success', 'File berhasil dienkripsi!')
+                         ->with('encryption_time', $duration);
+    
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -75,38 +84,49 @@ class FileController extends Controller
     }
 
     public function dekripsi(Request $request)
-{
-    try {
-        $request->validate([
-            'file_id' => 'required|exists:files,id',
-            'password' => 'required|string|min:8',
-        ]);
-
-        $file = File::findOrFail($request->file_id);
-
-        if ($file->password !== $request->password) {
-            return back()->withErrors(['password' => 'Password salah!']);
+    {
+        try {
+            $startTime = microtime(true); // <-- Start time
+    
+            $request->validate([
+                'file_id'  => 'required|exists:files,id',
+                'password' => 'required|string|min:8',
+            ]);
+    
+            $file = File::findOrFail($request->file_id);
+    
+            if ($file->password !== $request->password) {
+                return back()->withErrors(['password' => 'Password salah!']);
+            }
+    
+            $encryptedFile = Storage::get('encrypted/' . $file->encrypted_file);
+    
+            $password = $request->password;
+            $iv = Str::random(16);
+    
+            $decryptedFile = $this->tripleAesDecrypt($encryptedFile, $password, $iv);
+    
+            $decryptedFileName = 'dec_' . rand(1000, 9999) . '_' . $file->file_name;
+            $file->decrypted_file = $decryptedFileName;
+            Storage::put('decrypted/' . $decryptedFileName, $decryptedFile);
+    
+            $file->status = 'Terdekripsi';
+            $file->save();
+         
+            $endTime = microtime(true);
+            $duration = $endTime - $startTime;
+    
+            $duration = round($duration, 3);
+    
+            return back()->with('success', 'File berhasil didekripsi!')
+                         ->with('decryption_time', $duration)
+                         ->with('file', $decryptedFileName);
+    
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
         }
-
-        $encryptedFile = Storage::get('encrypted/' . $file->encrypted_file);
-
-        $password = $request->password;
-        $iv = Str::random(16);
-
-        $decryptedFile = $this->tripleAesDecrypt($encryptedFile, $password, $iv);
-
-        $decryptedFileName = 'dec_' . rand(1000, 9999) . '_' . $file->file_name;
-        $file->decrypted_file = $decryptedFileName;
-        Storage::put('decrypted/' . $decryptedFileName, $decryptedFile);
-
-        $file->status = 'Terdekripsi';
-        $file->save();
-
-        return back()->with('success', 'File berhasil didekripsi!')->with('file', $decryptedFileName);
-    } catch (\Exception $e) {
-        return back()->with('error', $e->getMessage());
     }
-}
+    
 
     private function tripleAesDecrypt($data, $password, $iv)
     {
