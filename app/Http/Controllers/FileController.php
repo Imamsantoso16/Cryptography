@@ -21,7 +21,7 @@ class FileController extends Controller
     
             $request->validate([
                 'date'       => 'required|date',
-                'file'       => 'required|file|mimes:jpg,jpeg,png,pdf,docx,txt|max:10240',
+                'file'       => 'required|file|mimes:jpg,jpeg,png,pdf,docx,txt,xls|max:10240',
                 'password'   => 'required|string|min:8',
                 'description'=> 'required|string',
             ]);
