@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('encrypted_file');
             $table->string('decrypted_file');
             $table->string('password');
+            $table->string('key');
             $table->string('keterangan');
             $table->bigInteger('file_size');
             $table->enum('status', ['Terenkripsi', 'Terdekripsi']);

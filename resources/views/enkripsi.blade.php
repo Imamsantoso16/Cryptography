@@ -36,7 +36,13 @@
 
                 <div class="form-group">
                     <label for="file">File</label>
-                    <input type="file" name="file" id="file" class="form-control" required>
+                    <input type="file" name="file" id="file" class="form-control"
+                        accept=".jpg,.jpeg,.png,.pdf,.docx,.txt,.xlsx" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="key">Key</label>
+                    <input type="key" name="key" id="key" class="form-control" required>
                 </div>
 
                 <div class="form-group">

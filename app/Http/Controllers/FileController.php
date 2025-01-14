@@ -9,180 +9,259 @@ use Illuminate\Support\Facades\Storage;
 
 class FileController extends Controller
 {
+    // function yang digunakan untuk menampilkan halaman daftar-file beserta file dari database
     public function index(){
+        // mengambil file dari database
         $files = File::all();
+        // mengembalikan tampilan daftar-file bersama dengan file yang diambil sebelumnya
         return view('daftar-file', compact('files'));
     }
     
+    // function yang digunakan untuk menyimpan dan mengenkripsi file
     public function store(Request $request)
     {
+        // mencoba untuk  menyimpan dan mengenkripsi file
         try {
-            $startTime = microtime(true); // <-- Start time
-    
+            // memulai waktu enkripsi dan penyimpanan file
+            $start_time = microtime(true);
+            // validasi tiap input apakah sudah sesuai dengan aturan yang berlaku
             $request->validate([
                 'date'       => 'required|date',
                 'file'       => 'required|file|mimes:jpg,jpeg,png,pdf,docx,txt,xls|max:10240',
                 'password'   => 'required|string|min:8',
+                'key'        => 'required|string|size:16',
                 'description'=> 'required|string',
             ]);
-    
+
+            // mengambil file dari user
             $file     = $request->file('file');
-            $fileName = time() . '_' . $file->getClientOriginalName();
-            $filePath = $file->storeAs('files', $fileName);
-    
+            // membuat nama file berdasarkan nama dari file yang dikirim user
+            $file_name = time() . '_' . $file->getClientOriginalName();
+            // menyimpan file yang dikirim user ke folder files
+            $file_path = $file->storeAs('files', $file_name);
+            // mengambil key yang dikirim user
+            $key      = $request->key;
+            // mengambil password yang dikirim user
             $password = $request->password;
-            $encryptedFile = $this->tripleAesEncrypt(Storage::get($filePath), $password);
-    
-            $encryptedFileName = 'enc_' . rand(1000, 9999) . '_' . $fileName;
-            Storage::put('encrypted/' . $encryptedFileName, $encryptedFile);
-    
-            $fileModel = new File();
-            $fileModel->username       = auth()->user()->username;
-            $fileModel->file_name      = $fileName;
-            $fileModel->encrypted_file = $encryptedFileName;
-            $fileModel->decrypted_file = "";
-            $fileModel->password       = $password;
-            $fileModel->keterangan     = $request->description;
-    
-            $fileSizeInBytes = $file->getSize();
-            $fileSizeInKB    = $fileSizeInBytes / 1024;
-            $fileModel->file_size       = $fileSizeInKB;
-            $fileModel->status          = 'Terenkripsi';
-            $fileModel->tanggal         = $request->date;
-            $fileModel->tanggal_enkripsi= now();
-            $fileModel->save();
-    
-            $endTime = microtime(true);
-            $duration = $endTime - $startTime;
-    
-            $duration = round($duration, 3);
-    
+            // proses encrypt file yang sudah disimpan di folder files
+            $encrypted_file = $this->tripleAesEncrypt(Storage::get($file_path), $key);
+            // mengubah nama dari file yang sudah diencrypt
+            $encrypted_file_name = 'enc_' . rand(1000, 9999) . '_' . $file_name;
+            // menyimpan file yang sudah diencrypt ke folder encrypted
+            Storage::put('encrypted/' . $encrypted_file_name, $encrypted_file);
+
+            // memanggil model file untuk menyimpan tiap pada tiap field
+            $file_model = new File();
+            // menyimpan field username
+            $file_model->username       = auth()->user()->username;
+            // menyimpan field file_name
+            $file_model->file_name      = $file_name;
+            // menyimpan field encrypted_file
+            $file_model->encrypted_file = $encrypted_file_name;
+            // menyimpan field decrypted_file
+            $file_model->decrypted_file = "";
+            // menyimpan field password
+            $file_model->password       = $password;
+            // menyimpan field key
+            $file_model->key            = $key;
+            // menyimpan field keterangan
+            $file_model->keterangan     = $request->description;
+            
+            // mendapatkan ukuran file dalam bentuk byte
+            $file_size_in_bytes = $file->getSize();
+            // mendapatkan ukuran file dalam bentuk kilo byte
+            $file_size_in_kB    = $file_size_in_bytes / 1024;
+            // menyimpan file field_size dalam ukuran kilo byte
+            $file_model->file_size       = $file_size_in_kB;
+            // menyimpan file status
+            $file_model->status          = 'Terenkripsi';
+            // menyimpan file tanggal
+            $file_model->tanggal         = $request->date;
+            // menyimpan file tanggal_enkripsi
+            $file_model->tanggal_enkripsi= now();
+            // menyimpan semua field tadi ke tabel file
+            $file_model->save();
+
+            // mendapatkan waktu selesai proses encrypt dan penyimpanan file
+            $end_time = microtime(true);
+            // menghitung selisih waktu dari waktu mulai dan waktu selesai
+            $duration = round($end_time - $start_time, 3);
+            
+            // kembali dengan status success dan waktu enkripsinya
             return back()->with('success', 'File berhasil dienkripsi!')
-                         ->with('encryption_time', $duration);
-    
+                        ->with('encryption_time', $duration);
+
         } catch (\Exception $e) {
+            // kembali dengan status error
             return back()->with('error', $e->getMessage());
         }
     }
 
-    private function tripleAesEncrypt($data, $password)
+    // function untuk encrypt file
+    private function tripleAesEncrypt($data, $key_from_user)
     {
+        // membuat random byte 16 karakter
         $iv = random_bytes(16);
-        $key = substr(hash('sha256', $password, true), 0, 16);
+        // membuat key yang digabungkan dengan key dari user
+        $key = substr(hash('sha256', $key_from_user, true), 0, 16);
 
-        $encryptedData = openssl_encrypt($data, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
-        $encryptedData = openssl_encrypt($encryptedData, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
-        $encryptedData = openssl_encrypt($encryptedData, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
-
-        return base64_encode($iv . $encryptedData);
+        // enkripsi aes-128 pertama
+        $encrypted_data = openssl_encrypt($data, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        // enkripsi aes-128 kedua
+        $encrypted_data = openssl_encrypt($encrypted_data, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        // enkripsi aes-128 ketiga
+        $encrypted_data = openssl_encrypt($encrypted_data, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        
+        // mengembalikan hasil encrypt
+        return base64_encode($iv . $encrypted_data);
     }
 
+    // function untuk menampilkan tampilan dekripsi beserta file yang statusnya Terenkripsi
     public function showDekripsiForm()
     {
+        // mengambil file yang statusnya Terenkripsi dari tabel file
         $files = File::where('status', 'Terenkripsi')->get();
+        // mengembalikan tampilan dekripsi bersama dengan file yang statusnya Terenkripsi
         return view('dekripsi', compact('files'));
     }
 
+    // function yang digunakan untuk menyimpa file yang terdekripsi dan mendekripsikan file
     public function dekripsi(Request $request)
     {
+        // mencoba untuk  menyimpan dan mengenkripsi file
         try {
-            $startTime = microtime(true); // <-- Start time
-    
+            // memulai waktu enkripsi dan penyimpanan file
+            $start_time = microtime(true);
+
+            // validasi tiap input apakah sudah sesuai dengan aturan yang berlaku
             $request->validate([
                 'file_id'  => 'required|exists:files,id',
                 'password' => 'required|string|min:8',
             ]);
-    
+
+            // mencari file berdasarkan id
             $file = File::findOrFail($request->file_id);
-    
+
+            // memeriksa apakah password yang dimasukan user benar atau salah
             if ($file->password !== $request->password) {
                 return back()->withErrors(['password' => 'Password salah!']);
             }
-    
-            $encryptedFile = Storage::get('encrypted/' . $file->encrypted_file);
-    
-            $password = $request->password;
-            $iv = Str::random(16);
-    
-            $decryptedFile = $this->tripleAesDecrypt($encryptedFile, $password, $iv);
-    
-            $decryptedFileName = 'dec_' . rand(1000, 9999) . '_' . $file->file_name;
-            $file->decrypted_file = $decryptedFileName;
-            Storage::put('decrypted/' . $decryptedFileName, $decryptedFile);
-    
+
+            // mengambil file yang sudah terenkripsi sebelumnya
+            $encrypted_file = Storage::get('encrypted/' . $file->encrypted_file);
+            // mengambil key dari tabel file
+            $key = $file->key;
+            // mendekripsikan file yang sudah diambil sebelumnya
+            $decryptedFile = $this->tripleAesDecrypt($encrypted_file, $key);
+            // memberikan nama file yang di decrypt
+            $decryptedFile_name = 'dec_' . rand(1000, 9999) . '_' . $file->file_name;
+            // menyimpan file yang di decrypt ke database
+            $file->decrypted_file = $decryptedFile_name;
+            // menyimpan file yang di decrypt ke folder decrypted
+            Storage::put('decrypted/' . $decryptedFile_name, $decryptedFile);
+            // mengubah field status ke Terdekripsi
             $file->status = 'Terdekripsi';
+            // menumpan perubahan pada database
             $file->save();
-         
-            $endTime = microtime(true);
-            $duration = $endTime - $startTime;
-    
-            $duration = round($duration, 3);
-    
+            // mendapatkan waktu selesai proses encrypt dan penyimpanan file
+            $end_time = microtime(true);
+            // menghitung selisih waktu dari waktu mulai dan waktu selesai
+            $duration = round($end_time - $start_time, 3);
+
+            // kembali dengan status success, durasi decrypt dan nama file yang di decrypt
             return back()->with('success', 'File berhasil didekripsi!')
-                         ->with('decryption_time', $duration)
-                         ->with('file', $decryptedFileName);
-    
+                        ->with('decryption_time', $duration)
+                        ->with('file', $decryptedFile_name);
+
         } catch (\Exception $e) {
+            // kembali dengan status error
             return back()->with('error', $e->getMessage());
         }
     }
-    
 
-    private function tripleAesDecrypt($data, $password, $iv)
+    // Function untuk mendekripsi file menggunakan triple AES decryption
+    private function tripleAesDecrypt($data, $password)
     {
+        // Decode data dari format Base64
         $data = base64_decode($data);
+        // Ambil 16 byte pertama sebagai initialization vector (IV)
         $iv = substr($data, 0, 16);
-        $encryptedData = substr($data, 16);
+        // Sisanya adalah data terenkripsi
+        $encrypted_data = substr($data, 16);
 
+        // Hash password dengan SHA-256 dan ambil 16 byte pertama sebagai key
         $key = substr(hash('sha256', $password, true), 0, 16);
-        $decryptedData = openssl_decrypt($encryptedData, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        // Lakukan dekripsi pertama menggunakan AES-128-CBC
+        $decryptedData = openssl_decrypt($encrypted_data, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        // Lakukan dekripsi kedua menggunakan AES-128-CBC
         $decryptedData = openssl_decrypt($decryptedData, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        // Lakukan dekripsi ketiga menggunakan AES-128-CBC
         $decryptedData = openssl_decrypt($decryptedData, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
 
+        // Kembalikan data yang sudah didekripsi
         return $decryptedData;
     }
 
-    public function destroy($fileId)
+    // function untuk menghapus file
+    public function destroy($file_id)
     {
+        // proses percobaan penghapusan file
         try {
-            $file = File::findOrFail($fileId);
+            // mencari file berdasarkan id
+            $file = File::findOrFail($file_id);
 
-            $filePath           = 'files/' . $file->file_name;
-            $encryptedFilePath  = 'encrypted/' . $file->encrypted_file;
-            $decryptedFilePath  = 'decrypted/' . $file->decrypted_file;
+            // lokasi file dari user
+            $file_path           = 'files/' . $file->file_name;
+            // lokasi file yang dienkripsi
+            $encrypted_file_path  = 'encrypted/' . $file->encrypted_file;
+            // lokasi file yang didekripsi
+            $decrypted_file_path  = 'decrypted/' . $file->decrypted_file;
 
-            if (Storage::exists($encryptedFilePath)) {
-                Storage::delete($encryptedFilePath);
+            // menghapus file dari user jika ada
+            if (Storage::exists($encrypted_file_path)) {
+                Storage::delete($encrypted_file_path);
             }
-
-            if (Storage::exists($decryptedFilePath)) {
-                Storage::delete($decryptedFilePath);
+            
+            // menghapus file yang terenkripsi jika ada
+            if (Storage::exists($decrypted_file_path)) {
+                Storage::delete($decrypted_file_path);
             }
-
-            if (Storage::exists($filePath)) {
-                Storage::delete($filePath);
+            
+            // menghapus file yang terdekripsi jika ada
+            if (Storage::exists($file_path)) {
+                Storage::delete($file_path);
             }
-
+            
+            // menghapus data file dari database
             $file->delete();
+            // kembali dengan success
             return back()->with('success', 'File dan data berhasil dihapus!');
         } catch (\Exception $e) {
+            // kembali dengan error
             return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
         }
     }
 
-    public function download($fileId, $type)
+    // function untun download
+    public function download($file_id, $type)
     {
-        $file = File::findOrFail($fileId);
+        // mencari file berasarkan id
+        $file = File::findOrFail($file_id);
+        // apakah file terenkripsi?
         if ($type === 'encrypted') {
-            $filePath = storage_path('app/encrypted/' . $file->encrypted_file);
+            // jika file terenkripsi maka ambil dari folder encrypted
+            $file_path = storage_path('app/encrypted/' . $file->encrypted_file);
         } else {
-            $filePath = storage_path('app/decrypted/' . $file->decrypted_file);
+            // jika file terdekripsi maka ambil dari folder decrypted
+            $file_path = storage_path('app/decrypted/' . $file->decrypted_file);
         }
 
-        if (!file_exists($filePath)) {
+        // jk a file tidak ada maka kembali dengan pesan error "file tidak ditmukan"
+        if (!file_exists($file_path)) {
             return back()->withErrors(['error' => 'File tidak ditemukan.']);
         }
-
-        return response()->download($filePath);
+        
+        // memberikan file yang ingin didownload
+        return response()->download($file_path);
     }
 }

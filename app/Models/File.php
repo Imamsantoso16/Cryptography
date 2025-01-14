@@ -16,6 +16,7 @@ class File extends Model
         'encrypted_file',
         'decrypted_file',
         'password',
+        'key',
         'keterangan',
         'file_size',
         'status',
